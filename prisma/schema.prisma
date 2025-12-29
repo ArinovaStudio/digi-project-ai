@@ -1,0 +1,123 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id String @id @default(uuid())
+  email String @unique
+  name String?
+  password String   
+  role Role @default(USER)
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  stripeCustomerId String? @unique
+
+  apiKey ApiKey?     
+  subscription Subscription? 
+  project Project[]   
+  usageLogs ChatLog[]
+  scrapeJobs ScrapeJob[]
+  payments Payment[]
+}
+
+model ApiKey {
+  id String @id @default(uuid())
+  userId String @unique
+  key String @unique 
+  balance Int
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  lastUsedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+
+model Plan {
+  id String @id @default(uuid())
+  name String @unique
+  description String?
+  price Decimal
+  monthlyTokens Int
+  ScrapeTimer Int 
+  stripePriceId String
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id String @id @default(uuid())
+  userId String @unique
+  planId String
+  status String 
+  startDate DateTime
+  EndDate DateTime
+  stripeSubscriptionId String @unique
+
+  user User @relation(fields: [userId], references: [id])
+  plan Plan @relation(fields: [planId], references: [id])
+}
+
+model Project {
+  id String @id @default(uuid())
+  userId String
+  url String?
+  csv String? 
+  scrapeFrequency Int @default(168) 
+  nextScrapeDue DateTime?
+  lastScrapeAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ScrapeJob {
+  id String @id @default(uuid())
+  userId String
+  status String   
+  startedAt DateTime @default(now())
+  completedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model ChatLog {
+  id String @id @default(uuid())
+  userId String
+  count Int
+  recommendedLinks String[] 
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+model Payment {
+  id String @id @default(uuid())
+  userId String
+  amount Decimal
+  currency String @default("inr")
+  status PaymentStatus @default(PENDING)
+  description String?
+  stripePaymentId String?    
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
