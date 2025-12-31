@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// Api to simulate /run-scrape python api
 export async function POST(req: NextRequest) {
   try {
     await new Promise((resolve) => setTimeout(resolve, 2000));

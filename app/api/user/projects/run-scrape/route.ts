@@ -12,16 +12,27 @@ const scrapeRequestSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
-    const response: any = await verifyUser();
-    const user = response?.user || response; 
+    let user = null;
+    let apiKey = null;
 
-    if (response?.success === false || !user) {
-      return NextResponse.json({ success: false, message: response.message || "Unauthorized" }, { status: 401 });
+    const providedKey = req.headers.get('x-api-key');
+
+    if (providedKey) {
+        apiKey = await prisma.apiKey.findUnique({
+            where: { key: providedKey },
+            include: { user: true } 
+        });
+
+        if (!apiKey || !apiKey.isActive) {
+            return NextResponse.json({ success: false, message: "Invalid or inactive API Key" }, { status: 401 });
+        }
+
+        user = apiKey.user;
     }
 
-    const apiKey = await prisma.apiKey.findUnique({
-        where: { userId: user.id }
-    });
+    if (!user) {
+        return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
 
     const subscription = await prisma.subscription.findUnique({ 
         where: { userId: user.id },
@@ -50,6 +61,7 @@ export async function POST(req: NextRequest) {
     const usage = await prisma.subscriptionUsage.findUnique({ where: { userId: user.id } });
     let project = await prisma.project.findFirst({ where: { userId: user.id, url: url }});
 
+    // Project creation
     if (!project) {
         if ((usage?.projectsAdded || 0) >= subscription.plan.maxProjects) {
             return NextResponse.json({ success: false, message: "Project limit reached." }, { status: 400 });
@@ -82,9 +94,13 @@ export async function POST(req: NextRequest) {
     await prisma.project.update({ where: { id: project.id }, data: { status: 'PROCESSING' } });
 
     try {
-        const pythonUrl = process.env.PYTHON_API_URL || 'http://localhost:3000';
+        const pythonUrl = process.env.PYTHON_API_URL;
 
-        const apiResponse = await axios.post(`${pythonUrl}/api/run-scrape`, { url: project.url },
+        if (!pythonUrl) {
+            return NextResponse.json({ success: false, message: "Python API URL not found" }, { status: 500 });
+        }
+
+        const apiResponse = await axios.post(`${pythonUrl}/run-scrape`, { url: project.url },
             { responseType: 'arraybuffer' } 
         );
 
