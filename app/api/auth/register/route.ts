@@ -46,9 +46,37 @@ export async function POST(req: NextRequest) {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    let freePlan = await prisma.plan.findUnique({ where: { name: 'Free' } });
+      
+    if (!freePlan) {
+      freePlan = await prisma.plan.create({
+        data: {
+          name: 'Free',
+          price: 0,
+          stripePriceId: '',
+          monthlyCredits: 100, 
+          maxProjects: 1
+        }
+      });
+    }
+
     const user = await prisma.user.create({ data: { email, name, password: hashedPassword } });
 
-    await prisma.apiKey.create({ data: { userId: user.id, key: generateApiKey(), balance: 0, isActive: true } });
+    await prisma.apiKey.create({ data: { userId: user.id, key: generateApiKey(), balance: freePlan.monthlyCredits, isActive: true } });
+
+    await prisma.subscription.create({
+      data: {
+        userId: user.id,
+        planId: freePlan.id,
+        status: 'ACTIVE',
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date(new Date().setMonth(new Date().getMonth() + 1)),
+      }
+    });
+
+    await prisma.subscriptionUsage.create({
+      data: { userId: user.id, creditsUsed: 0, projectsAdded: 0 }
+    });
 
     const secret = process.env.JWT_SECRET;
     if (!secret) {
