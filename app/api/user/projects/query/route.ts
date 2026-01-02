@@ -35,10 +35,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: "No active subscription" }, { status: 403 });
     }
 
-    if (apiKey.balance < 1) {
-      return NextResponse.json({ success: false, message: "Insufficient tokens." }, { status: 402 });
-    }
-
     const body = await req.json();
     const validation = queryRequestSchema.safeParse(body);
 
