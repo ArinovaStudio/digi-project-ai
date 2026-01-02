@@ -58,6 +58,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: "Unauthorized access to this session" }, { status: 403 });
     }
 
+    const isNewConnection = chatLog.tokensUsed === 0;
+
+    if (isNewConnection && apiKey.balance < 1) {
+        return NextResponse.json({ success: false, message: "Insufficient tokens to start a new session" }, { status: 402 });
+    }
+
     try {
       const pythonUrl = process.env.PYTHON_API_URL;
       if (!pythonUrl) {
@@ -79,7 +85,6 @@ export async function POST(req: NextRequest) {
         throw new Error("Python API returned failure");
       }
       
-      // Extract new links
       const newLinks: string[] = [];
       if (data.top_results && Array.isArray(data.top_results)) {
         data.top_results.forEach((item: any) => {
@@ -91,43 +96,26 @@ export async function POST(req: NextRequest) {
       newLinks.forEach(link => existingLinks.add(link));
       const updatedLinks = Array.from(existingLinks);
 
-      await prisma.$transaction([
+      const chatUpdateData: any = {
+        messageCount: { increment: 1 },
+        recommendedLinks: updatedLinks,
+      };
 
-        // Update Chat Log
-        prisma.chatLog.update({
-          where: { id: chatLog.id },
-          data: {
-            messageCount: { increment: 1 },
-            tokensUsed: { increment: 1 },
-            recommendedLinks: updatedLinks,
-          }
-        }),
+      // Deduct tokens 
+      if (isNewConnection) {
+          chatUpdateData.tokensUsed = { increment: 1 };
 
-        // Deduct Tokens
-        prisma.apiKey.update({
-          where: { userId: user.id },
-          data: { balance: { decrement: 1 } }
-        }),
+          await prisma.apiKey.update({ where: { userId: user.id }, data: { balance: { decrement: 1 } }});
 
-        prisma.subscriptionUsage.update({
-          where: { userId: user.id },
-          data: { creditsUsed: { increment: 1 } }
-        })
-      ]);
+          await prisma.subscriptionUsage.update({ where: { userId: user.id }, data: { creditsUsed: { increment: 1 } }})
+      }
+      
+      await prisma.chatLog.update({ where: { id: chatLog.id }, data: chatUpdateData });
 
       return NextResponse.json(data, { status: 200 });
 
-    } catch (pythonError: any) {
-      console.error("Query Engine Error:", pythonError.message);
-      
-      // If end_chat was true, maybe it succeeded even if something else failed? 
-      // But generally, if python fails, we return error and DO NOT deduct token.
-      
-      return NextResponse.json({ 
-        success: false, 
-        message: "Query processing failed.", 
-        details: pythonError.response?.data || pythonError.message 
-      }, { status: 502 });
+    } catch (error) {
+      return NextResponse.json({ success: false, message: "Scraping failed", error }, { status: 502 });
     }
 
   } catch (error) {
