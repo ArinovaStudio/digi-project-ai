@@ -4,9 +4,9 @@ import prisma from '@/lib/prisma';
 import stripe from '@/lib/stripe';
 import Stripe from 'stripe';
 
-async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
-  const userId = session.metadata?.userId;
-  const planId = session.metadata?.planId;
+async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
+  const userId = paymentIntent.metadata?.userId;
+  const planId = paymentIntent.metadata?.planId;
 
   if (!userId || !planId) {
     throw new Error('Missing metadata in Stripe Webhook');
@@ -27,21 +27,18 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
     prisma.payment.create({
       data: {
         userId: userId,
-        amount: Number(session.amount_total) / 100, 
-        currency: session.currency || 'inr',
+        amount: Number(paymentIntent.amount) / 100, 
+        currency: paymentIntent.currency || 'inr',
         status: 'COMPLETED',
         description: `Purchase of ${plan.name}`,
-        stripePaymentId: session.payment_intent as string,
+        stripePaymentId: paymentIntent.id,
       }
     }),
 
     // Update User
     prisma.user.update({
       where: { id: userId },
-      data: { 
-        stripeCustomerId: session.customer as string,
-        isActive: true 
-      },
+      data: { isActive: true }
     }),
 
     // Update User Subscription
@@ -89,9 +86,9 @@ export async function POST(req: NextRequest) {
             body, signature, process.env.STRIPE_WEBHOOK_SECRET!
         );
 
-        if (event.type === 'checkout.session.completed') {
-            const session = event.data.object as Stripe.Checkout.Session;
-            await handlePaymentSuccess(session);
+        if (event.type === 'payment_intent.succeeded') {
+            const paymentIntent = event.data.object as Stripe.PaymentIntent;
+            await handlePaymentSuccess(paymentIntent);
         }
 
         return NextResponse.json({ success: true, message: "Success" }, { status: 200 });

@@ -20,37 +20,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({  success: false, message: 'Invalid Plan' }, { status: 404 });
     }
 
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card', 'amazon_pay', 'paypal'],
-      line_items: [
-        {
-          price_data: {
-            currency: 'inr',
-            product_data: {
-              name: plan.name,
-              description: plan.description || `Subscription for ${plan.name}`,
-            },
-            unit_amount: Math.round(Number(plan.price) * 100), // in paisa 
-          },
-          quantity: 1,
-        },
-      ],
-      mode: 'payment',
-      
-      success_url: `${process.env.NEXT_APP_URL}/dashboard?payment_success=true`,
-      cancel_url: `${process.env.NEXT_APP_URL}/plans?payment_success=false`,
-      customer_email: user.email,
+    let customerId = user.stripeCustomerId;
 
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        name: user.name || undefined,
+        metadata: { userId: user.id }
+      });
+      customerId = customer.id;
+      
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { stripeCustomerId: customerId }
+      });
+    }
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(Number(plan.price) * 100),
+      currency: 'inr',
+      customer: customerId,
+      automatic_payment_methods: { enabled: true },
+      description: plan.description || `Purchase of ${plan.name}`,
+      
       metadata: {
         userId: user.id,
         planId: plan.id,
       },
-      
-    //   customer_creation: user.stripeCustomerId ? undefined : 'always',
-    //   customer: user.stripeCustomerId || undefined,
     });
 
-    return NextResponse.json({ success: true, url: session.url }, { status: 200 });
+    return NextResponse.json({ success: true, clientSecret: paymentIntent.client_secret }, { status: 200 });
 
   } catch (error) {
     console.error('Checkout Error:', error);
