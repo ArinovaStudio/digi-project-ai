@@ -115,9 +115,9 @@ model ChatLog {
   id String @id @default(uuid())
   userId String
   projectId String
-  sessionId String
+  sessionId String @unique
   messageCount Int @default(1) 
-  tokensUsed Int @default(0) 
+  tokensUsed Int @default(1) 
   latency Int?
   recommendedLinks String[]
   createdAt DateTime @default(now())
@@ -131,6 +131,7 @@ model ScrapeJob {
   userId String
   projectId String?
   status String
+  cost Int @default(0)
   startedAt DateTime @default(now())
   completedAt DateTime?
   log String?
