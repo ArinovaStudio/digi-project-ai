@@ -1,13 +1,19 @@
-// components/PricingCard.tsx
 "use client";
 
 import { Plan } from "@/app/pricing/page";
 import { Check } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export default function PricingCard({ plan }: { plan: Plan }) {
+  const router = useRouter();
+
+  const handleGetPlan = () => {
+    router.push(`/payment/${plan.id}`);
+  };
+
   return (
     <div
-      className={`rounded-2xl border border-white/10 p-6 flex flex-col
+      className={`rounded-2xl border border-white/10 p-6 w-full max-w-sm text-center
       ${
         plan.highlight
           ? "bg-gradient-to-b from-[#1a1a1a] to-[#111] ring-1 ring-white/20"
@@ -21,7 +27,8 @@ export default function PricingCard({ plan }: { plan: Plan }) {
 
       <button
         disabled={plan.isCurrent}
-        className={`mb-6 rounded-full py-2 text-sm font-medium transition
+        onClick={!plan.isCurrent ? handleGetPlan : undefined}
+        className={`mb-6 rounded-full py-2 w-full text-sm font-medium transition
         ${
           plan.isCurrent
             ? "bg-white/10 text-gray-400 cursor-not-allowed"
