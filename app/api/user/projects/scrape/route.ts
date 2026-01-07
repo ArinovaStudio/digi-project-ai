@@ -5,15 +5,19 @@ import { z } from 'zod';
 
 const scrapeRequestSchema = z.object({
   url: z.string().url("Invalid URL format"),
+  apiKey: z.string().min(1, "API Key is required"),
 });
 
 export async function POST(req: NextRequest) {
   try {
-    const providedKey = req.headers.get('x-api-key');
+    const body = await req.json();
+    const validation = scrapeRequestSchema.safeParse(body);
 
-    if (!providedKey) {
-      return NextResponse.json({ success: false, message: "Api Key not provided" }, { status: 401 });
+    if (!validation.success) {
+      return NextResponse.json({ success: false, message: "Validation Error", errors: validation.error.flatten().fieldErrors }, { status: 400 });
     }
+
+    const { url, apiKey: providedKey } = validation.data;
 
     const apiKey = await prisma.apiKey.findUnique({ where: { key: providedKey }, include: { user: true }});
 
@@ -44,15 +48,6 @@ export async function POST(req: NextRequest) {
     if (scrapeCost > 0 && apiKey.balance < scrapeCost) {
       return NextResponse.json({ success: false, message: "Concurrent scraping requires 1 token. Insufficient balance" }, { status: 402 });
     }
-
-    const body = await req.json();
-    const validation = scrapeRequestSchema.safeParse(body);
-
-    if (!validation.success) {
-      return NextResponse.json({ success: false, message: "Validation Error", errors: validation.error.flatten().fieldErrors }, { status: 400 });
-    }
-
-    const { url } = validation.data;
 
     const usage = await prisma.subscriptionUsage.findUnique({ where: { userId: user.id } });
     

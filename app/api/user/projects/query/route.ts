@@ -6,17 +6,21 @@ import { z } from 'zod';
 const queryRequestSchema = z.object({
   session_id: z.string().min(1, "Session ID is required"),
   query: z.string().min(1, "Query is required"),
+  apiKey: z.string().min(1, "API Key is required"),
   top_k: z.number().optional().default(3),
   end_chat: z.boolean().optional().default(false),
 });
 
 export async function POST(req: NextRequest) {
   try {
-    const providedKey = req.headers.get('x-api-key');
+    const body = await req.json();
+    const validation = queryRequestSchema.safeParse(body);
 
-    if (!providedKey) {
-      return NextResponse.json({ success: false, message: "Api Key not provided" }, { status: 401 });
+    if (!validation.success) {
+      return NextResponse.json({ success: false, message: "Validation Error", errors: validation.error.flatten().fieldErrors }, { status: 400 });
     }
+
+    const { session_id, query, top_k, end_chat, apiKey: providedKey } = validation.data;
 
     const apiKey = await prisma.apiKey.findUnique({ where: { key: providedKey }, include: { user: true }});
 
@@ -35,14 +39,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: "No active subscription" }, { status: 403 });
     }
 
-    const body = await req.json();
-    const validation = queryRequestSchema.safeParse(body);
-
-    if (!validation.success) {
-      return NextResponse.json({ success: false, message: "Validation Error", errors: validation.error.flatten().fieldErrors }, { status: 400 });
-    }
-
-    const { session_id, query, top_k, end_chat } = validation.data;
+    
 
     const chatLog = await prisma.chatLog.findUnique({ where: { sessionId: session_id }, include: { project: true }});
 
