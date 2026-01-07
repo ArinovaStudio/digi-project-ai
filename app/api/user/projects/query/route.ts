@@ -22,7 +22,15 @@ export async function POST(req: NextRequest) {
 
     const { session_id, query, top_k, end_chat, apiKey: providedKey } = validation.data;
 
-    const apiKey = await prisma.apiKey.findUnique({ where: { key: providedKey }, include: { user: true }});
+    // base64 decoding
+    let decodedApiKey: string;
+    try {
+      decodedApiKey = Buffer.from(providedKey, 'base64').toString('utf-8');
+    } catch (e) {
+      return NextResponse.json({ success: false, message: "Invalid API Key encoding" }, { status: 400 });
+    }
+
+    const apiKey = await prisma.apiKey.findUnique({ where: { key: decodedApiKey }, include: { user: true }});
 
     if (!apiKey || !apiKey.isActive) {
       return NextResponse.json({ success: false, message: "Invalid or inactive API Key" }, { status: 401 });
